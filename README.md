@@ -1,6 +1,6 @@
 # AnimeDubs Android Library
 
-[![Release](https://jitpack.io/v/hamzaharoon1314/AnimeDubsLibrary.svg)](https://jitpack.io/#hamzaharoon1314/AnimeDubsLibrary)
+[![](https://jitpack.io/v/hamzaharoon1314/AnimeDubsLibrary.svg)](https://jitpack.io/#hamzaharoon1314/AnimeDubsLibrary)
 
 A blazing fast, highly optimized, and production-ready native Kotlin Android library that allows developers to easily check if a specific anime series has an English dub available.
 
