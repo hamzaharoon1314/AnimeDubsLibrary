@@ -117,4 +117,18 @@ internal class CacheManager(private val context: Context) {
         }
         result
     }
+
+    suspend fun clearCache() = withContext(Dispatchers.IO) {
+        Logger.d("CacheManager: Clearing all dub and AniList caches")
+        inMemoryDubCache = null
+        inMemoryAnilistMap = null
+        
+        if (dubCacheFile.exists()) {
+            dubCacheFile.delete()
+        }
+        
+        context.dataStore.edit { prefs ->
+            prefs.clear()
+        }
+    }
 }
