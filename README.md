@@ -27,9 +27,8 @@ This library is distributed via JitPack.
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        google()
         mavenCentral()
-        maven("https://jitpack.io")
+        maven { url = uri("https://jitpack.io") }
     }
 }
 ```
@@ -37,7 +36,7 @@ dependencyResolutionManagement {
 **2. Add the dependency to your app-level `build.gradle.kts`:**
 ```kotlin
 dependencies {
-    implementation("com.github.hamzaharoon1314:AnimeDubsLibrary:1.0.0")
+    implementation("com.github.hamzaharoon1314:AnimeDubsLibrary:Tag")
 }
 ```
 
