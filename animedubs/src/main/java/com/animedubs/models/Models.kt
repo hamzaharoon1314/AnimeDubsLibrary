@@ -28,8 +28,8 @@ data class DubStatusResult(
 
 @Serializable
 internal data class DubInfoPayload(
-    val yes: List<Int> = emptyList(),
-    val partial: List<Int> = emptyList(),
+    @SerialName("dubbed") val yes: List<Int> = emptyList(),
+    @SerialName("incomplete") val partial: List<Int> = emptyList(),
     val no: List<Int> = emptyList()
 )
 
