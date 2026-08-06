@@ -62,7 +62,7 @@ android {
 }
 
 dependencies {
-    implementation("com.github.hamzaharoon1314:AnimeDubsLibrary:2.0.2")
+    implementation(project(":animedubs"))
 
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")

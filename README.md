@@ -38,7 +38,8 @@ dependencyResolutionManagement {
 **2. Add the dependency to your app-level `build.gradle.kts`:**
 ```kotlin
 dependencies {
-    implementation("com.github.hamzaharoon1314:AnimeDubsLibrary:Tag")
+    val animeDubsVersion = "2.0.2" // Replace with the latest release tag
+    implementation("com.github.hamzaharoon1314:AnimeDubsLibrary:$animeDubsVersion")
 }
 ```
 

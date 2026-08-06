@@ -40,7 +40,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.animedubs.AnimeDubs
+import com.animedubs.AnimeDubsClient
+import com.animedubs.models.Confidence
 import com.animedubs.models.DubStatus
+import com.animedubs.models.Language
 import com.animedubs.models.SyncState
 import com.animedubs.rememberDubStatusByAnilistId
 import com.animedubs.rememberDubStatusByMalId
@@ -118,7 +121,10 @@ fun MainScreen(
     viewModel: SampleViewModel = hiltViewModel()
 ) {
     val navController = rememberNavController()
-    val syncState by AnimeDubs.syncState.collectAsStateWithLifecycle()
+    val activeDataset by viewModel.activeDataset.collectAsStateWithLifecycle()
+    // Need to remember the flow so we don't lose collection on recomposition
+    val syncStateFlow = remember(activeDataset) { viewModel.activeClient.syncState }
+    val syncState by syncStateFlow.collectAsStateWithLifecycle(initialValue = SyncState.IDLE)
     val snackbarHostState = remember { SnackbarHostState() }
 
     val items = listOf(Screen.Search, Screen.Explore, Screen.Profile)
@@ -213,8 +219,78 @@ enum class IdType { MAL, ANILIST }
 data class SearchQuery(val id: Int, val type: IdType)
 
 @Composable
+fun DatasetConfigSection(viewModel: SampleViewModel) {
+    val activeDataset by viewModel.activeDataset.collectAsStateWithLifecycle()
+    val selectedLanguage by viewModel.selectedLanguage.collectAsStateWithLifecycle()
+    val selectedConfidence by viewModel.selectedConfidence.collectAsStateWithLifecycle()
+
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth().animateContentSize(),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Dataset Configuration", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(
+                    selected = activeDataset == DatasetType.MAL,
+                    onClick = { viewModel.setDatasetType(DatasetType.MAL) }
+                )
+                Text("MAL-Dubs")
+                Spacer(modifier = Modifier.width(16.dp))
+                RadioButton(
+                    selected = activeDataset == DatasetType.MY_DUB_LIST,
+                    onClick = { viewModel.setDatasetType(DatasetType.MY_DUB_LIST) }
+                )
+                Text("MyDubList")
+            }
+            
+            AnimatedVisibility(visible = activeDataset == DatasetType.MY_DUB_LIST) {
+                Column {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Language & Confidence (MyDubList)", fontWeight = FontWeight.SemiBold)
+                    
+                    ScrollableTabRow(
+                        selectedTabIndex = Language.values().indexOf(selectedLanguage),
+                        edgePadding = 0.dp,
+                        modifier = Modifier.fillMaxWidth(),
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                    ) {
+                        Language.values().forEach { language ->
+                            Tab(
+                                selected = selectedLanguage == language,
+                                onClick = { viewModel.setMyDubListConfig(language, selectedConfidence) },
+                                text = { Text(language.name, style = MaterialTheme.typography.labelSmall) }
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    ScrollableTabRow(
+                        selectedTabIndex = Confidence.values().indexOf(selectedConfidence),
+                        edgePadding = 0.dp,
+                        modifier = Modifier.fillMaxWidth(),
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                    ) {
+                        Confidence.values().forEach { conf ->
+                            Tab(
+                                selected = selectedConfidence == conf,
+                                onClick = { viewModel.setMyDubListConfig(selectedLanguage, conf) },
+                                text = { Text(conf.name, style = MaterialTheme.typography.labelSmall) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun SearchScreen(viewModel: SampleViewModel) {
-    val syncState by AnimeDubs.syncState.collectAsStateWithLifecycle()
+    val activeDataset by viewModel.activeDataset.collectAsStateWithLifecycle()
+    val syncStateFlow = remember(activeDataset) { viewModel.activeClient.syncState }
+    val syncState by syncStateFlow.collectAsStateWithLifecycle(initialValue = SyncState.IDLE)
     var totalDubbedCount by remember { mutableIntStateOf(0) }
     
     var searchInput by remember { mutableStateOf("") }
@@ -229,9 +305,9 @@ fun SearchScreen(viewModel: SampleViewModel) {
     }
     val coroutineScope = rememberCoroutineScope()
 
-    LaunchedEffect(syncState) {
+    LaunchedEffect(syncState, activeDataset) {
         if (syncState == SyncState.SUCCESS || syncState == SyncState.IDLE) {
-            totalDubbedCount = AnimeDubs.getAllDubbedMalIds().size
+            totalDubbedCount = viewModel.activeClient.getAllDubbedMalIds().size
         }
     }
 
@@ -240,6 +316,10 @@ fun SearchScreen(viewModel: SampleViewModel) {
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        item {
+            DatasetConfigSection(viewModel)
+        }
+
         item {
             ElevatedCard(
                 modifier = Modifier
@@ -262,7 +342,7 @@ fun SearchScreen(viewModel: SampleViewModel) {
                             onClick = {
                                 viewModel.clearCache()
                                 coroutineScope.launch {
-                                    totalDubbedCount = AnimeDubs.getAllDubbedMalIds().size
+                                    totalDubbedCount = viewModel.activeClient.getAllDubbedMalIds().size
                                 }
                             },
                             modifier = Modifier.weight(1f)
@@ -321,7 +401,7 @@ fun SearchScreen(viewModel: SampleViewModel) {
                 enter = fadeIn(tween(300)) + slideInVertically(tween(300)) { it / 2 },
                 exit = fadeOut(tween(300))
             ) {
-                AnimeStatusCard(query = query)
+                AnimeStatusCard(query = query, client = viewModel.activeClient)
             }
         }
     }
@@ -343,11 +423,14 @@ fun ExploreScreen(viewModel: SampleViewModel) {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
+            DatasetConfigSection(viewModel)
+        }
+        item {
             Text(
                 text = "Trending This Week",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 8.dp)
+                modifier = Modifier.padding(bottom = 8.dp, top = 8.dp)
             )
         }
         item {
@@ -378,7 +461,7 @@ fun ExploreScreen(viewModel: SampleViewModel) {
             }
         }
         items(mockTrending) { query ->
-            AnimeStatusCard(query = query)
+            AnimeStatusCard(query = query, client = viewModel.activeClient)
         }
     }
 }
@@ -473,11 +556,11 @@ fun ProfileScreen(
 }
 
 @Composable
-fun AnimeStatusCard(query: SearchQuery) {
+fun AnimeStatusCard(query: SearchQuery, client: AnimeDubsClient) {
     val statusResult by if (query.type == IdType.MAL) {
-        rememberDubStatusByMalId(malId = query.id)
+        rememberDubStatusByMalId(malId = query.id, client = client)
     } else {
-        rememberDubStatusByAnilistId(anilistId = query.id)
+        rememberDubStatusByAnilistId(anilistId = query.id, client = client)
     }
 
     Card(modifier = Modifier.fillMaxWidth().animateContentSize()) {

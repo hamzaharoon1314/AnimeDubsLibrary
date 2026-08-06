@@ -43,6 +43,25 @@ object AnimeDubs : AnimeDubsClient {
         }
     }
 
+    /**
+     * Creates a new independent AnimeDubsClient instance.
+     * Useful for Dependency Injection or if you need to query multiple data sources simultaneously.
+     * 
+     * @param context Application context
+     * @param dataSource The data source to use (e.g. MalDubs or MyDubList)
+     * @param cacheTTLMillis How long to cache data locally before refetching
+     */
+    fun createClient(
+        context: Context,
+        dataSource: com.animedubs.models.DataSource = com.animedubs.models.DataSource.MalDubs,
+        cacheTTLMillis: Long = 24 * 60 * 60 * 1000L
+    ): AnimeDubsClient {
+        val appContext = context.applicationContext
+        val networkClient = NetworkClient(dataSource)
+        val cacheManager = CacheManager(appContext, dataSource, cacheTTLMillis)
+        return AnimeDubsRepository(cacheManager, networkClient, dataSource)
+    }
+
     private fun getRepo(): AnimeDubsClient {
         return repository ?: throw IllegalStateException("AnimeDubs has not been initialized. Call AnimeDubs.init(context) first.")
     }

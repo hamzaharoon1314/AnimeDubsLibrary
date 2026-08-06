@@ -16,8 +16,8 @@ import com.animedubs.models.DubStatusResult
  * Recomposes automatically whenever the background sync completes or the cache updates.
  */
 @Composable
-fun rememberDubStatusByMalId(malId: Int): State<DubStatusResult> {
-    return AnimeDubs.observeStatusByMalId(malId).collectAsStateWithLifecycle(
+fun rememberDubStatusByMalId(malId: Int, client: AnimeDubsClient = AnimeDubs): State<DubStatusResult> {
+    return client.observeStatusByMalId(malId).collectAsStateWithLifecycle(
         initialValue = DubStatusResult(malId = malId, anilistId = null, status = com.animedubs.models.DubStatus.UNKNOWN)
     )
 }
@@ -29,8 +29,8 @@ fun rememberDubStatusByMalId(malId: Int): State<DubStatusResult> {
  * @return A Compose [State] containing the [DubStatusResult]. 
  */
 @Composable
-fun rememberDubStatusByAnilistId(anilistId: Int): State<DubStatusResult> {
-    return AnimeDubs.observeStatusByAnilistId(anilistId).collectAsStateWithLifecycle(
+fun rememberDubStatusByAnilistId(anilistId: Int, client: AnimeDubsClient = AnimeDubs): State<DubStatusResult> {
+    return client.observeStatusByAnilistId(anilistId).collectAsStateWithLifecycle(
         initialValue = DubStatusResult(malId = -1, anilistId = anilistId, status = com.animedubs.models.DubStatus.UNKNOWN)
     )
 }

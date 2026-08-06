@@ -1,35 +1,64 @@
 package dev.hamo.AnimeDubsLibrary
 
+import android.app.Application
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.animedubs.AnimeDubs
+import com.animedubs.AnimeDubsClient
+import com.animedubs.models.Confidence
+import com.animedubs.models.DataSource
+import com.animedubs.models.Language
 import com.animedubs.models.SyncState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import kotlin.system.measureTimeMillis
 
-import com.animedubs.AnimeDubsClient
+enum class DatasetType { MAL, MY_DUB_LIST }
 
 @HiltViewModel
 class SampleViewModel @Inject constructor(
-    private val animeDubsClient: AnimeDubsClient
+    private val app: Application
 ) : ViewModel() {
 
     // UI Events like Snackbars
     private val _uiEvents = MutableSharedFlow<String>()
     val uiEvents = _uiEvents.asSharedFlow()
 
+    // Active Dataset selection
+    private val _activeDataset = MutableStateFlow(DatasetType.MAL)
+    val activeDataset = _activeDataset.asStateFlow()
+
+    // Config for MyDubList
+    private val _selectedLanguage = MutableStateFlow(Language.ENGLISH)
+    val selectedLanguage = _selectedLanguage.asStateFlow()
+
+    private val _selectedConfidence = MutableStateFlow(Confidence.LOW)
+    val selectedConfidence = _selectedConfidence.asStateFlow()
+
+    // Clients
+    val malClient: AnimeDubsClient = AnimeDubs // Singleton
+    
+    private val _myDubListClient = MutableStateFlow(AnimeDubs.createClient(app, DataSource.MyDubList()))
+    val myDubListClient = _myDubListClient.asStateFlow()
+
+    val activeClient: AnimeDubsClient
+        get() = if (activeDataset.value == DatasetType.MAL) malClient else myDubListClient.value
+
     init {
         // Observe network state for Error Handling (Offline Mode)
-        animeDubsClient.syncState
+        // We'll just observe the MAL client for global errors to keep it simple,
+        // or you could observe both and merge.
+        malClient.syncState
             .onEach { state ->
                 when (state) {
-                    SyncState.ERROR -> emitSnackbar("Network Error: Failed to sync dub status.")
+                    SyncState.ERROR -> emitSnackbar("Network Error: Failed to sync MAL dub status.")
                     SyncState.UNAUTHORIZED -> emitSnackbar("Auth Error: AniList Token is invalid.")
                     else -> {}
                 }
@@ -37,11 +66,19 @@ class SampleViewModel @Inject constructor(
             .launchIn(viewModelScope)
     }
 
-    /**
-     * Demonstrates the Bulk Fetch API capabilities.
-     * Fetches 20 trending AniList IDs in a single batched query, 
-     * measures the exact time, and shows the result in a Snackbar.
-     */
+    fun setDatasetType(type: DatasetType) {
+        _activeDataset.value = type
+    }
+
+    fun setMyDubListConfig(language: Language, confidence: Confidence) {
+        _selectedLanguage.value = language
+        _selectedConfidence.value = confidence
+        _myDubListClient.value = AnimeDubs.createClient(
+            context = app,
+            dataSource = DataSource.MyDubList(confidence, language)
+        )
+    }
+
     fun runBulkFetchBenchmark() {
         viewModelScope.launch {
             val mockTrendingIds = listOf(
@@ -53,23 +90,23 @@ class SampleViewModel @Inject constructor(
             
             var resultCount = 0
             val timeTaken = measureTimeMillis {
-                val results = animeDubsClient.getStatusesByAnilistIds(mockTrendingIds)
+                val results = activeClient.getStatusesByAnilistIds(mockTrendingIds)
                 resultCount = results.size
             }
             
-            emitSnackbar("Bulk Fetch: Retrieved $resultCount statuses in ${timeTaken}ms! 🚀")
+            emitSnackbar("Bulk Fetch: Retrieved $resultCount statuses in ${timeTaken}ms using ${activeDataset.value}! 🚀")
         }
     }
 
     fun forceRefresh() {
         viewModelScope.launch {
-            animeDubsClient.forceRefresh()
+            activeClient.forceRefresh()
         }
     }
 
     fun clearCache() {
         viewModelScope.launch {
-            animeDubsClient.clearCache()
+            activeClient.clearCache()
         }
     }
 
