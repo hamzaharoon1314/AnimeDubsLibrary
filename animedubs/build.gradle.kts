@@ -32,6 +32,14 @@ android {
     kotlinOptions {
         jvmTarget = "1.8"
     }
+    
+    buildFeatures {
+        compose = true
+    }
+    
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.0"
+    }
 
     publishing {
         singleVariant("release") {
@@ -69,6 +77,10 @@ dependencies {
     
     // DataStore Preferences
     implementation("androidx.datastore:datastore-preferences:1.0.0")
+
+    // Optional Jetpack Compose Integration (compileOnly ensures we don't bloat non-Compose apps)
+    compileOnly("androidx.compose.runtime:runtime:1.5.0")
+    compileOnly("androidx.lifecycle:lifecycle-runtime-compose:2.6.2")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

@@ -60,4 +60,44 @@ class AnimeDubsRepositoryTest {
 
         assertEquals(SyncState.UNAUTHORIZED, repository.syncState.value)
     }
+
+    @Test
+    fun `getStatusesByAnilistIds chunks 105 requests into batches of 50`() = runTest {
+        coEvery { cacheManager.isCacheValid() } returns true
+        coEvery { cacheManager.getMalIdsForAnilist(any()) } returns emptyMap()
+        coEvery { networkClient.fetchMalIdsFromAnilist(any()) } returns emptyMap()
+
+        // 105 random AniList IDs
+        val ids = (1..105).toList()
+        repository.getStatusesByAnilistIds(ids)
+
+        // 105 IDs / 50 chunks = 3 network calls (50, 50, 5)
+        coVerify(exactly = 3) { networkClient.fetchMalIdsFromAnilist(any()) }
+    }
+
+    @Test
+    fun `observeStatusByMalId emits snapshot immediately and updates after background sync`() = runTest {
+        coEvery { cacheManager.isCacheValid() } returns false
+        coEvery { cacheManager.getDubStatus(1) } returns DubStatus.UNKNOWN andThen DubStatus.YES
+        coEvery { networkClient.fetchDubInfo() } returns DubInfoPayload(yes = listOf(1))
+
+        val flow = repository.observeStatusByMalId(1)
+        
+        // Initial emission should be UNKNOWN, then the background sync triggered by warmUp() completes, 
+        // triggering _syncEvent which emits YES.
+        val emissions = mutableListOf<com.animedubs.models.DubStatusResult>()
+        val job = kotlinx.coroutines.launch {
+            flow.collect { emissions.add(it) }
+        }
+
+        repository.forceRefresh()
+        
+        // Yield to allow coroutines to run
+        kotlinx.coroutines.delay(100)
+        
+        assertEquals(DubStatus.UNKNOWN, emissions.first().status)
+        assertEquals(DubStatus.YES, emissions.last().status)
+        
+        job.cancel()
+    }
 }
