@@ -1,0 +1,30 @@
+*.iml
+.gradle
+/local.properties
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+
+# IDE
+.idea/
+
+# Logs
+*.log
+
+# Gradle
+.gradle/
+build/
+*/build/
+
+# App module
+/app/build/
+
+# animedubs module
+/animedubs/build/
+
+# Gradle Wrapper (Not standard practice to ignore, but requested)
+gradlew
+gradlew.bat
+/gradle/wrapper/
