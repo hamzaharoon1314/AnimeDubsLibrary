@@ -193,21 +193,23 @@ internal class AnimeDubsRepository(
         syncDubInfoIfNeeded()
     }
 
-    override suspend fun forceRefresh() = withContext(Dispatchers.IO) {
-        syncMutex.withLock {
-            _syncState.value = SyncState.SYNCING
-            try {
-                val payload = networkClient.fetchDubInfo()
-                cacheManager.saveDubInfo(
-                    yes = payload.yes,
-                    partial = payload.partial,
-                    no = payload.no
-                )
-                _syncState.value = SyncState.SUCCESS
-                _syncEvent.tryEmit(Unit)
-            } catch (e: Exception) {
-                _syncState.value = SyncState.ERROR
-                Logger.e("AnimeDubsRepository: Force refresh failed", e)
+    override suspend fun forceRefresh() {
+        withContext(Dispatchers.IO) {
+            syncMutex.withLock {
+                _syncState.value = SyncState.SYNCING
+                try {
+                    val payload = networkClient.fetchDubInfo()
+                    cacheManager.saveDubInfo(
+                        yes = payload.yes,
+                        partial = payload.partial,
+                        no = payload.no
+                    )
+                    _syncState.value = SyncState.SUCCESS
+                    _syncEvent.tryEmit(Unit)
+                } catch (e: Exception) {
+                    _syncState.value = SyncState.ERROR
+                    Logger.e("AnimeDubsRepository: Force refresh failed", e)
+                }
             }
         }
     }
