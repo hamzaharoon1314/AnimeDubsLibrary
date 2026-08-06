@@ -1,0 +1,11 @@
+AnimeDubsLibrary
+
+This product fetches and utilizes external datasets.
+
+When using the `DataSource.MyDubList` configuration, the data is sourced from MyDubList.
+* MyDubList (https://mydublist.com)
+* MyDubList dataset is licensed under the Creative Commons Attribution 4.0 International (CC BY 4.0) license.
+* CC BY 4.0 License Terms: https://creativecommons.org/licenses/by/4.0/
+
+When using the `DataSource.MalDubs` configuration, the data is sourced from MAL-Dubs.
+* MAL-Dubs (https://github.com/MAL-Dubs/MAL-Dubs)

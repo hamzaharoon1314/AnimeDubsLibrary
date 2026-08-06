@@ -26,14 +26,18 @@ object AnimeDubs : AnimeDubsClient {
     /**
      * Initializes the AnimeDubs library. Must be called once, preferably in Application.onCreate().
      */
-    fun init(context: Context) {
+    fun init(
+        context: Context, 
+        dataSource: com.animedubs.models.DataSource = com.animedubs.models.DataSource.MalDubs,
+        cacheTTLMillis: Long = 24 * 60 * 60 * 1000L
+    ) {
         if (repository == null) {
             synchronized(this) {
                 if (repository == null) {
                     val appContext = context.applicationContext
-                    val cacheManager = CacheManager(appContext)
-                    val networkClient = NetworkClient()
-                    repository = AnimeDubsRepository(cacheManager, networkClient)
+                    val networkClient = NetworkClient(dataSource)
+                    val cacheManager = CacheManager(appContext, dataSource, cacheTTLMillis)
+                    repository = AnimeDubsRepository(cacheManager, networkClient, dataSource)
                 }
             }
         }
@@ -41,6 +45,10 @@ object AnimeDubs : AnimeDubsClient {
 
     private fun getRepo(): AnimeDubsClient {
         return repository ?: throw IllegalStateException("AnimeDubs has not been initialized. Call AnimeDubs.init(context) first.")
+    }
+
+    override fun getAttributionText(): String? {
+        return getRepo().getAttributionText()
     }
 
     /**
@@ -51,11 +59,25 @@ object AnimeDubs : AnimeDubsClient {
     }
 
     /**
-     * Checks the dub status for a given AniList ID.
-     * This will internally resolve the AniList ID to a MAL ID.
+     * Returns a reactive Flow that emits the dub status immediately, and updates automatically
+     * whenever a background sync completes successfully.
+     */
+    override fun observeStatusByMalId(malId: Int): kotlinx.coroutines.flow.Flow<DubStatusResult> {
+        return getRepo().observeStatusByMalId(malId)
+    }
+
+    /**
+     * Fetches the dub status of an Anime by its AniList ID.
      */
     override suspend fun getStatusByAnilistId(anilistId: Int): DubStatusResult {
         return getRepo().getStatusByAnilistId(anilistId)
+    }
+
+    /**
+     * Returns a reactive Flow for an AniList ID.
+     */
+    override fun observeStatusByAnilistId(anilistId: Int): kotlinx.coroutines.flow.Flow<DubStatusResult> {
+        return getRepo().observeStatusByAnilistId(anilistId)
     }
 
     /**
@@ -64,6 +86,13 @@ object AnimeDubs : AnimeDubsClient {
      */
     override suspend fun getStatusesByAnilistIds(anilistIds: List<Int>): Map<Int, DubStatusResult> {
         return getRepo().getStatusesByAnilistIds(anilistIds)
+    }
+
+    /**
+     * Retrieves a complete list of all MAL IDs that are currently known to be Dubbed (YES or PARTIAL).
+     */
+    override suspend fun getAllDubbedMalIds(): List<Int> {
+        return getRepo().getAllDubbedMalIds()
     }
 
     /**

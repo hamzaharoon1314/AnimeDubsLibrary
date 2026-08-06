@@ -12,7 +12,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import com.animedubs.internal.utils.Logger
 
-internal class NetworkClient {
+internal class NetworkClient(private val dataSource: DataSource) {
     private val client = OkHttpClient()
     
     @Volatile
@@ -26,17 +26,35 @@ internal class NetworkClient {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     suspend fun fetchDubInfo(): DubInfoPayload = withContext(Dispatchers.IO) {
-        Logger.d("NetworkClient: Fetching dubInfo.json")
+        Logger.d("NetworkClient: Fetching dub info for source: $dataSource")
+        val url = when (dataSource) {
+            is DataSource.MalDubs -> "https://raw.githubusercontent.com/MAL-Dubs/MAL-Dubs/main/data/dubInfo.json"
+            is DataSource.MyDubList -> {
+                "https://raw.githubusercontent.com/Joelis57/MyDubList/main/dubs/confidence/${dataSource.confidence.value}/dubbed_${dataSource.language.value}.json"
+            }
+        }
+        
         val request = Request.Builder()
-            .url("https://raw.githubusercontent.com/MAL-Dubs/MAL-Dubs/main/data/dubInfo.json")
+            .url(url)
             .build()
 
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw IOException("Failed to fetch dub info: ${response.code}")
             
             val body = response.body?.string() ?: throw IOException("Empty response body")
-            Logger.d("NetworkClient: Successfully fetched dubInfo.json")
-            json.decodeFromString<DubInfoPayload>(body)
+            Logger.d("NetworkClient: Successfully fetched dub info")
+            
+            when (dataSource) {
+                is DataSource.MalDubs -> json.decodeFromString<DubInfoPayload>(body)
+                is DataSource.MyDubList -> {
+                    val payload = json.decodeFromString<MyDubListPayload>(body)
+                    DubInfoPayload(
+                        yes = payload.dubbed,
+                        partial = payload.partial,
+                        no = emptyList()
+                    )
+                }
+            }
         }
     }
 

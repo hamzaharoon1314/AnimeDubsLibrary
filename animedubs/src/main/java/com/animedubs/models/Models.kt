@@ -24,6 +24,45 @@ data class DubStatusResult(
     val status: DubStatus
 )
 
+enum class Confidence(val value: String) {
+    LOW("low"),
+    NORMAL("normal"),
+    HIGH("high"),
+    VERY_HIGH("very-high")
+}
+
+enum class Language(val value: String) {
+    ENGLISH("english"),
+    SPANISH("spanish"),
+    GERMAN("german"),
+    FRENCH("french"),
+    ITALIAN("italian"),
+    PORTUGUESE("portuguese"),
+    KOREAN("korean"),
+    CHINESE("chinese"),
+    TAGALOG("tagalog"),
+    ARABIC("arabic"),
+    POLISH("polish"),
+    HINDI("hindi"),
+    HUNGARIAN("hungarian"),
+    SWEDISH("swedish"),
+    NORWEGIAN("norwegian"),
+    HEBREW("hebrew"),
+    DUTCH("dutch"),
+    RUSSIAN("russian"),
+    INDONESIAN("indonesian"),
+    DANISH("danish"),
+    THAI("thai")
+}
+
+sealed class DataSource {
+    object MalDubs : DataSource()
+    data class MyDubList(
+        val confidence: Confidence = Confidence.LOW,
+        val language: Language = Language.ENGLISH
+    ) : DataSource()
+}
+
 // Internal models for network parsing
 
 @Serializable
@@ -31,6 +70,13 @@ internal data class DubInfoPayload(
     @SerialName("dubbed") val yes: List<Int> = emptyList(),
     @SerialName("incomplete") val partial: List<Int> = emptyList(),
     val no: List<Int> = emptyList()
+)
+
+@Serializable
+internal data class MyDubListPayload(
+    val language: String? = null,
+    val dubbed: List<Int> = emptyList(),
+    val partial: List<Int> = emptyList()
 )
 
 @Serializable
