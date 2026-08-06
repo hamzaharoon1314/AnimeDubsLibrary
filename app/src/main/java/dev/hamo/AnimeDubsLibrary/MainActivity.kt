@@ -15,9 +15,12 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
@@ -39,6 +42,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import androidx.navigation.NavType
 import com.animedubs.AnimeDubs
 import com.animedubs.AnimeDubsClient
 import com.animedubs.models.Confidence
@@ -52,6 +57,10 @@ import dev.hamo.AnimeDubsLibrary.auth.AuthManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import coil.compose.AsyncImage
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -196,7 +205,23 @@ fun MainScreen(
             modifier = Modifier.padding(innerPadding)
         ) {
             composable(Screen.Search.route) { SearchScreen(viewModel) }
-            composable(Screen.Explore.route) { ExploreScreen(viewModel) }
+            composable(Screen.Explore.route) { 
+                ExploreScreen(
+                    viewModel = viewModel,
+                    onNavigateToDetail = { malId -> navController.navigate("detail/$malId") }
+                ) 
+            }
+            composable(
+                route = "detail/{malId}",
+                arguments = listOf(navArgument("malId") { type = NavType.IntType })
+            ) { backStackEntry ->
+                val malId = backStackEntry.arguments?.getInt("malId") ?: return@composable
+                AnimeDetailScreen(
+                    malId = malId, 
+                    viewModel = viewModel, 
+                    onBack = { navController.popBackStack() }
+                )
+            }
             composable(Screen.Profile.route) { 
                 val malToken by malTokenFlow.collectAsStateWithLifecycle()
                 val anilistToken by anilistTokenFlow.collectAsStateWithLifecycle()
@@ -408,20 +433,62 @@ fun SearchScreen(viewModel: SampleViewModel) {
 }
 
 @Composable
-fun ExploreScreen(viewModel: SampleViewModel) {
-    val mockTrending = listOf(
-        SearchQuery(113415, IdType.ANILIST), // Jujutsu Kaisen
-        SearchQuery(101922, IdType.ANILIST), // Demon Slayer
-        SearchQuery(11061, IdType.ANILIST),  // Hunter x Hunter
-        SearchQuery(1, IdType.MAL),          // Cowboy Bebop (MAL ID)
-        SearchQuery(20, IdType.MAL)          // Naruto (MAL ID)
-    )
+fun ExploreScreen(viewModel: SampleViewModel, onNavigateToDetail: (Int) -> Unit) {
+    val topAnime by viewModel.topAnime.collectAsStateWithLifecycle()
+    val isLoading by viewModel.isLoadingTopAnime.collectAsStateWithLifecycle()
+    val error by viewModel.topAnimeError.collectAsStateWithLifecycle()
+    val isFetchingMore by viewModel.isFetchingMore.collectAsStateWithLifecycle()
+    val isSearching by viewModel.isSearching.collectAsStateWithLifecycle()
+
+    var searchQuery by remember { mutableStateOf("") }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Search Anime Details", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            label = { Text("Enter Anime Title") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                if (searchQuery.isNotBlank()) {
+                                    focusManager.clearFocus()
+                                    viewModel.searchAnimeByTitle(searchQuery) { malId ->
+                                        if (malId != null) {
+                                            onNavigateToDetail(malId)
+                                            searchQuery = ""
+                                        }
+                                    }
+                                }
+                            },
+                            enabled = !isSearching && searchQuery.isNotBlank()
+                        ) {
+                            if (isSearching) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            } else {
+                                Text("Search")
+                            }
+                        }
+                    }
+                }
+            }
+        }
         item {
             DatasetConfigSection(viewModel)
         }
@@ -460,8 +527,107 @@ fun ExploreScreen(viewModel: SampleViewModel) {
                 }
             }
         }
-        items(mockTrending) { query ->
-            AnimeStatusCard(query = query, client = viewModel.activeClient)
+        
+        if (isLoading) {
+            item {
+                Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            }
+        } else if (error != null && topAnime.isEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(32.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "Failed to load anime",
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = error ?: "Unknown error",
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(onClick = { viewModel.fetchTopAnime() }) {
+                            Text("Retry")
+                        }
+                    }
+                }
+            }
+        } else {
+            itemsIndexed(topAnime, key = { index, anime -> "${anime.mal_id}_$index" }) { index, anime ->
+                AnimeExploreCard(anime = anime, client = viewModel.activeClient)
+                
+                // Trigger load more when nearing the end of the list
+                if (index >= topAnime.size - 3) {
+                    LaunchedEffect(Unit) {
+                        viewModel.loadNextPage()
+                    }
+                }
+            }
+            
+            if (isFetchingMore) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AnimeExploreCard(anime: JikanAnime, client: AnimeDubsClient) {
+    val statusResult by rememberDubStatusByMalId(malId = anime.mal_id, client = client)
+
+    Card(modifier = Modifier.fillMaxWidth().animateContentSize()) {
+        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            AsyncImage(
+                model = anime.images.jpg.image_url,
+                contentDescription = anime.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(RoundedCornerShape(8.dp))
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = anime.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "MAL ID: ${anime.mal_id}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                val targetColor = when (statusResult.status) {
+                    DubStatus.YES -> MaterialTheme.colorScheme.primary
+                    DubStatus.PARTIAL -> MaterialTheme.colorScheme.secondary
+                    DubStatus.NO -> MaterialTheme.colorScheme.error
+                    DubStatus.UNKNOWN -> MaterialTheme.colorScheme.outline
+                }
+                
+                val animatedColor by animateColorAsState(targetValue = targetColor, animationSpec = tween(500))
+                
+                Text(
+                    text = "Dub Status: ${statusResult.status.name}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = animatedColor,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
         }
     }
 }
@@ -604,6 +770,133 @@ fun AnimeStatusCard(query: SearchQuery, client: AnimeDubsClient) {
                 color = animatedColor,
                 fontWeight = FontWeight.SemiBold
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AnimeDetailScreen(malId: Int, viewModel: SampleViewModel, onBack: () -> Unit) {
+    val detail by viewModel.animeDetail.collectAsStateWithLifecycle()
+    val isLoading by viewModel.isLoadingDetail.collectAsStateWithLifecycle()
+    val statusResult by rememberDubStatusByMalId(malId = malId, client = viewModel.activeClient)
+
+    LaunchedEffect(malId) {
+        viewModel.fetchAnimeDetails(malId)
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Anime Details") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                )
+            )
+        }
+    ) { paddingValues ->
+        if (isLoading || detail == null) {
+            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else {
+            val anime = detail!!
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item {
+                    AsyncImage(
+                        model = anime.images.jpg.large_image_url ?: anime.images.jpg.image_url,
+                        contentDescription = anime.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(300.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+                }
+                
+                item {
+                    Text(
+                        text = anime.title,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("MAL ID: ${anime.mal_id}", style = MaterialTheme.typography.bodyMedium)
+                        if (anime.score != null) {
+                            Text("Score: ${anime.score}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+                
+                item {
+                    val targetColor = when (statusResult.status) {
+                        DubStatus.YES -> MaterialTheme.colorScheme.primary
+                        DubStatus.PARTIAL -> MaterialTheme.colorScheme.secondary
+                        DubStatus.NO -> MaterialTheme.colorScheme.error
+                        DubStatus.UNKNOWN -> MaterialTheme.colorScheme.outline
+                    }
+                    
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = targetColor.copy(alpha = 0.1f))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = "Library Dub Status",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = statusResult.status.name,
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = targetColor,
+                                fontWeight = FontWeight.Black
+                            )
+                        }
+                    }
+                }
+                
+                item {
+                    Text("Synopsis", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = anime.synopsis ?: "No synopsis available.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                
+                item {
+                    if (anime.episodes != null || anime.status != null) {
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                if (anime.episodes != null) {
+                                    Text("Episodes: ${anime.episodes}", style = MaterialTheme.typography.bodyMedium)
+                                }
+                                if (anime.status != null) {
+                                    Text("Status: ${anime.status}", style = MaterialTheme.typography.bodyMedium)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

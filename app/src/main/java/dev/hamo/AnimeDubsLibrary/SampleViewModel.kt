@@ -51,6 +51,21 @@ class SampleViewModel @Inject constructor(
     val activeClient: AnimeDubsClient
         get() = if (activeDataset.value == DatasetType.MAL) malClient else myDubListClient.value
 
+    private val _topAnime = MutableStateFlow<List<JikanAnime>>(emptyList())
+    val topAnime = _topAnime.asStateFlow()
+
+    private val _isLoadingTopAnime = MutableStateFlow(true)
+    val isLoadingTopAnime = _isLoadingTopAnime.asStateFlow()
+
+    private val _topAnimeError = MutableStateFlow<String?>(null)
+    val topAnimeError = _topAnimeError.asStateFlow()
+
+    private var currentPage = 1
+    private var hasNextPage = true
+    
+    private val _isFetchingMore = MutableStateFlow(false)
+    val isFetchingMore = _isFetchingMore.asStateFlow()
+
     init {
         // Observe network state for Error Handling (Offline Mode)
         // We'll just observe the MAL client for global errors to keep it simple,
@@ -64,6 +79,102 @@ class SampleViewModel @Inject constructor(
                 }
             }
             .launchIn(viewModelScope)
+            
+        fetchTopAnime()
+    }
+
+    fun fetchTopAnime() {
+        viewModelScope.launch {
+            _isLoadingTopAnime.value = true
+            _topAnimeError.value = null
+            currentPage = 1
+            try {
+                val response = JikanApi.getTopAnime(page = currentPage)
+                _topAnime.value = response.data
+                hasNextPage = response.pagination.has_next_page
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _topAnimeError.value = e.message ?: "Unknown Error"
+                emitSnackbar("Failed to fetch top anime: ${e.message}")
+            } finally {
+                _isLoadingTopAnime.value = false
+            }
+        }
+    }
+
+    fun loadNextPage() {
+        if (_isFetchingMore.value || !hasNextPage || _isLoadingTopAnime.value) return
+        
+        viewModelScope.launch {
+            _isFetchingMore.value = true
+            try {
+                val nextPage = currentPage + 1
+                val response = JikanApi.getTopAnime(page = nextPage)
+                
+                // Deduplicate to prevent Compose key crashes (Jikan top list can shift)
+                val currentIds = _topAnime.value.map { it.mal_id }.toSet()
+                val newUniqueAnime = response.data.filter { it.mal_id !in currentIds }
+                
+                _topAnime.value = _topAnime.value + newUniqueAnime
+                currentPage = nextPage
+                hasNextPage = response.pagination.has_next_page
+            } catch (e: Exception) {
+                e.printStackTrace()
+                emitSnackbar("Failed to load more anime: ${e.message}")
+            } finally {
+                _isFetchingMore.value = false
+            }
+        }
+    }
+
+    // --- Search & Details ---
+
+    private val _isSearching = MutableStateFlow(false)
+    val isSearching = _isSearching.asStateFlow()
+
+    fun searchAnimeByTitle(query: String, onResult: (Int?) -> Unit) {
+        viewModelScope.launch {
+            _isSearching.value = true
+            try {
+                // Jikan's search endpoint is too flaky (often 504 on popular titles like "One Piece").
+                // We use Anilist's GraphQL API as a highly reliable fallback to find the MAL ID.
+                val malId = JikanApi.searchAnimeMalId(query)
+                if (malId != null) {
+                    onResult(malId)
+                } else {
+                    emitSnackbar("No anime found for \"$query\"")
+                    onResult(null)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                emitSnackbar("Search failed: ${e.message}")
+                onResult(null)
+            } finally {
+                _isSearching.value = false
+            }
+        }
+    }
+
+    private val _animeDetail = MutableStateFlow<JikanAnimeDetail?>(null)
+    val animeDetail = _animeDetail.asStateFlow()
+    
+    private val _isLoadingDetail = MutableStateFlow(false)
+    val isLoadingDetail = _isLoadingDetail.asStateFlow()
+
+    fun fetchAnimeDetails(malId: Int) {
+        viewModelScope.launch {
+            _isLoadingDetail.value = true
+            _animeDetail.value = null
+            try {
+                val response = JikanApi.getAnimeDetails(malId)
+                _animeDetail.value = response.data
+            } catch (e: Exception) {
+                e.printStackTrace()
+                emitSnackbar("Failed to fetch details: ${e.message}")
+            } finally {
+                _isLoadingDetail.value = false
+            }
+        }
     }
 
     fun setDatasetType(type: DatasetType) {
