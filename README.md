@@ -181,5 +181,12 @@ If data isn't showing up as expected, enable internal logging to see exact cache
 AnimeDubs.isDebugLoggingEnabled = true
 ```
 
+## ⚖️ License & Credits
+
+This project is licensed under the [Apache License 2.0](LICENSE).
+
+### Credits
+Data for anime dub status is sourced from [MAL-Dubs](https://github.com/MAL-Dubs/MAL-Dubs). A huge thanks to the maintainers of MAL-Dubs for curating and providing this invaluable data.
+
 ---
 *Built with ❤️ for Anime fans and Android developers.*
